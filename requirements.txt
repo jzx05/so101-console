@@ -1,0 +1,23 @@
+# Minimal dependency set, independent of the project's main .venv
+# (deliberately without torch or lerobot).
+#
+#   uv venv tools/debug_console/.venv --python 3.12
+#   uv pip install --python tools/debug_console/.venv/bin/python -r tools/debug_console/requirements.txt
+#
+# On Windows the interpreter path is .venv\Scripts\python.exe instead of .venv/bin/python.
+pyserial>=3.5
+feetech-servo-sdk>=1.0.0
+# The vendored motor layer requires deepdiff unconditionally when a bus is
+# constructed, even though a single-model SO-101 never uses it. Without it, port
+# probing and connecting both raise ImportError. Do not drop this.
+deepdiff>=8.0
+tqdm>=4.66
+fastapi>=0.115
+uvicorn>=0.30
+opencv-python-headless>=4.9
+# Live joint/camera streaming to the Rerun desktop viewer (the teleop "Rerun view"
+# button). The wheel bundles the viewer binary, so nothing else is needed.
+rerun-sdk>=0.24
+
+# Test-only
+pytest>=8.0

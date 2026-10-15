@@ -1,0 +1,7 @@
+# The console's own virtualenv — recreate it with the commands in the README.
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/

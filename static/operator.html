@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SO-101 Operator</title>
+<link rel="icon" type="image/svg+xml" href="/static/assets/favicon.svg">
+<link rel="stylesheet" href="/static/style.css?v={{v}}">
+<style>
+  /* A stripped-down view meant to fill a second monitor while teleoperating:
+     cameras as large as possible, everything else out of the way. */
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { display: flex; flex-direction: column; background: #0b0d11; }
+
+  .op-bar {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.45rem 0.9rem; flex: 0 0 auto;
+    background: var(--c-panel); border-bottom: 1px solid var(--c-line);
+  }
+  .op-bar .title { font-weight: 600; }
+  .op-bar .spacer { flex: 1; }
+  #op-state { font-weight: 600; }
+  #op-state.running { color: var(--c-ok); }
+  #op-state.stopped { color: var(--pico-muted-color); }
+  #op-state.failing { color: var(--c-fail); }
+
+  .op-cams {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; gap: 2px; padding: 2px;
+    grid-auto-rows: 1fr;
+  }
+  .op-cam { position: relative; background: #000; border-radius: 4px; overflow: hidden; }
+  .op-cam img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .op-cam .tag {
+    position: absolute; left: 0.4rem; top: 0.4rem;
+    background: rgba(0,0,0,0.55); padding: 0.1rem 0.45rem;
+    border-radius: 4px; font-size: 0.75rem;
+  }
+  .op-cam .err {
+    position: absolute; inset: auto 0.4rem 0.4rem 0.4rem;
+    color: var(--c-fail); font-size: 0.75rem;
+  }
+
+  .op-joints {
+    flex: 0 0 auto; display: flex; gap: 1rem; flex-wrap: wrap;
+    padding: 0.45rem 0.9rem;
+    background: var(--c-panel); border-top: 1px solid var(--c-line);
+    font-size: 0.82rem;
+  }
+  .op-joint { display: flex; gap: 0.35rem; align-items: baseline; }
+  .op-joint .name { color: var(--pico-muted-color); }
+  .op-joint .val { font-variant-numeric: tabular-nums; }
+  .op-joint .err { color: var(--c-warn); }
+  .op-empty { grid-column: 1 / -1; align-self: center; text-align: center; color: var(--pico-muted-color); }
+</style>
+</head>
+<body>
+
+<div class="op-bar">
+  <img src="/static/assets/favicon.svg" alt="" width="18" height="18">
+  <span class="title">SO-101 Operator</span>
+  <span id="op-state" class="stopped">connecting…</span>
+  <span class="spacer"></span>
+  <span id="op-rate" class="small muted"></span>
+</div>
+
+<div class="op-cams" id="op-cams"></div>
+<div class="op-joints" id="op-joints"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* The camera grid is rebuilt only when the set of open cameras changes —
+ * rewriting the <img> elements on every tick would restart the MJPEG streams. */
+let camKey = null;
+
+function renderCams(cams) {
+  const names = Object.keys(cams);
+  const key = names.join("|");
+  if (key === camKey) {
+    // Same cameras: only refresh the error text.
+    names.forEach((n) => {
+      const el = document.getElementById(`err-${CSS.escape(n)}`);
+      if (el) el.textContent = cams[n].error || "";
+    });
+    return;
+  }
+  camKey = key;
+
+  $("#op-cams").style.gridTemplateColumns = names.length > 1 ? "1fr 1fr" : "1fr";
+  $("#op-cams").innerHTML = names.length
+    ? names.map((n) => `
+        <figure class="op-cam">
+          <img src="/api/video/${encodeURIComponent(n)}?fps=15" alt="${esc(n)}">
+          <figcaption class="tag">${esc(n)}</figcaption>
+          <div class="err" id="err-${CSS.escape(n)}">${esc(cams[n].error || "")}</div>
+        </figure>`).join("")
+    : `<p class="op-empty">No cameras open.<br>
+         Open one on the <b>Device</b> tab of the console, then come back here.</p>`;
+}
+
+function renderJoints(rows) {
+  $("#op-joints").innerHTML = rows.map((r) => `
+    <span class="op-joint">
+      <span class="name">${esc(r.joint)}</span>
+      <span class="val">${r.leader ?? "—"}</span>
+      <span class="muted">→</span>
+      <span class="val">${r.follower ?? "—"}</span>
+      <span class="err">${Math.abs(r.err ?? 0) > 5 ? `Δ${r.err}` : ""}</span>
+    </span>`).join("");
+}
+
+function render(state) {
+  const t = state.teleop;
+  const el = $("#op-state");
+  if (t.fails) { el.textContent = "failing"; el.className = "failing"; }
+  else if (t.running) { el.textContent = "running"; el.className = "running"; }
+  else { el.textContent = "stopped"; el.className = "stopped"; }
+  $("#op-rate").textContent = t.running ? `${t.hz} Hz · ${t.iter} frames` : (t.error || "");
+
+  renderCams(state.cameras || {});
+  renderJoints(t.rows || []);
+}
+
+new EventSource("/api/events").onmessage = (m) => render(JSON.parse(m.data));
+fetch("/api/state").then((r) => r.json()).then(render);
+</script>
+</body>
+</html>

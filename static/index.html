@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SO-101 Debug Console</title>
+<link rel="icon" type="image/svg+xml" href="/static/assets/favicon.svg">
+<link rel="stylesheet" href="/static/vendor/pico.min.css">
+<link rel="stylesheet" href="/static/style.css?v={{v}}">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">
+    <img src="/static/assets/favicon.svg" alt="" width="22" height="22">
+    SO-101 Debug Console
+  </span>
+  <span class="pill" id="hdr-follower">Follower · off</span>
+  <span class="pill" id="hdr-leader">Leader · off</span>
+  <span class="spacer"></span>
+  <span class="muted mono small" id="hdr-busy"></span>
+  <button class="panic" id="btn-panic" title="Cut torque on both arms immediately">Release all</button>
+</header>
+
+<nav class="tabs">
+  <button data-tab="health" class="active">Device</button>
+  <button data-tab="calib">Calibration</button>
+  <button data-tab="teleop">Teleop</button>
+</nav>
+
+<main>
+  <div class="banner" id="error-banner" hidden></div>
+
+  <!-- ============================ DEVICE ============================ -->
+  <section class="tabpage active" id="tab-health">
+
+    <article>
+      <h2>Serial ports</h2>
+      <div class="row">
+        <button id="btn-refresh-ports">Refresh</button>
+        <span class="hint inline">Probe scans the bus without the handshake check, so a missing motor is reported instead of aborting.</span>
+      </div>
+      <table id="tbl-ports">
+        <thead><tr>
+          <th>Port</th><th>Kind</th><th>Description</th><th>Serial / HWID</th><th>Probe</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </article>
+
+    <div class="grid2">
+      <article>
+        <h2>Follower <span class="mono muted" id="follower-title"></span></h2>
+        <div class="row">
+          <label for="follower-port">Port</label><select id="follower-port"></select>
+          <label for="follower-id">Name</label><input id="follower-id" value="my_awesome_follower_arm" size="24">
+        </div>
+        <div class="row">
+          <button class="primary" data-connect="follower">Connect</button>
+          <button data-disconnect="follower">Disconnect</button>
+          <button data-health="follower">Re-check</button>
+          <button data-torque-off="follower">Torque off</button>
+        </div>
+        <div class="mono small muted ellipsis" id="follower-json"></div>
+        <div id="follower-motors"></div>
+        <div id="follower-findings"></div>
+      </article>
+
+      <article>
+        <h2>Leader <span class="mono muted" id="leader-title"></span></h2>
+        <div class="row">
+          <label for="leader-port">Port</label><select id="leader-port"></select>
+          <label for="leader-id">Name</label><input id="leader-id" value="my_awesome_leader_arm" size="24">
+        </div>
+        <div class="row">
+          <button class="primary" data-connect="leader">Connect</button>
+          <button data-disconnect="leader">Disconnect</button>
+          <button data-health="leader">Re-check</button>
+          <button data-torque-off="leader">Torque off</button>
+        </div>
+        <div class="mono small muted ellipsis" id="leader-json"></div>
+        <div id="leader-motors"></div>
+        <div id="leader-findings"></div>
+      </article>
+    </div>
+
+    <article>
+      <h2>Leader vs follower</h2>
+      <div class="row">
+        <button class="primary" id="btn-compare">Compare calibration</button>
+        <span class="hint inline">Reads both calibration files. No hardware needed. Body joints only.</span>
+      </div>
+      <div id="pair-findings"></div>
+    </article>
+
+    <article>
+      <h2>Cameras</h2>
+      <div class="row">
+        <button id="btn-scan-cams">Scan cameras</button>
+        <span class="small muted" id="cam-scan-status"></span>
+      </div>
+      <table id="tbl-cams"><tbody></tbody></table>
+      <div class="row">
+        <label for="cam-name">Name</label>
+        <input id="cam-name" placeholder="handeye" size="12">
+        <label for="cam-index">Index</label><input id="cam-index" value="0" size="8">
+        <label for="cam-w">Size</label>
+        <input id="cam-w" type="number" value="640" class="narrow"> ×
+        <input id="cam-h" type="number" value="480" class="narrow">
+        <label for="cam-fps">FPS</label><input id="cam-fps" type="number" value="30" class="narrow">
+        <button id="btn-open-cam">Open</button>
+      </div>
+      <p class="hint">Name is your own label for this camera — it becomes the camera key in recorded datasets (handeye, fixed, front, …). Any short name works.</p>
+      <div class="cams" id="cam-previews"></div>
+    </article>
+
+    <article>
+      <h2>Log</h2>
+      <div class="log" id="log-box"></div>
+    </article>
+  </section>
+
+  <!-- ============================ CALIBRATION ============================ -->
+  <section class="tabpage" id="tab-calib">
+    <article>
+      <h2>Guided calibration</h2>
+      <div class="row">
+        <label for="calib-role">Arm</label>
+        <select id="calib-role">
+          <option value="leader">Leader</option>
+          <option value="follower">Follower</option>
+        </select>
+        <button class="primary" id="btn-calib-prepare">1 · Prepare (release torque)</button>
+        <button id="btn-calib-homing">2 · Set midpoint</button>
+        <button class="primary" id="btn-calib-sweep-start">3 · Start sweep</button>
+        <button class="danger" id="btn-calib-sweep-stop">Finish sweep</button>
+      </div>
+      <div class="steps" id="calib-steps">
+        <span class="step" data-step="idle">Idle</span>
+        <span class="step" data-step="prepared">Torque off</span>
+        <span class="step" data-step="homed">Midpoint set</span>
+        <span class="step" data-step="sweeping">Sweeping</span>
+        <span class="step" data-step="review">Review</span>
+        <span class="step" data-step="applied">Written</span>
+      </div>
+      <p class="hint">Step 2: park every joint at the middle of its travel (push to both hard stops, then centre) before clicking. Step 3: sweep each joint end to end, holding it against the hard stop at both ends. wrist_roll is excluded and fixed to 0-4095.</p>
+    </article>
+
+    <article>
+      <h2>Live travel</h2>
+      <div id="sweep-table"></div>
+      <p class="hint" id="sweep-hint" hidden></p>
+      <p class="hint">The grey line marks 2047. After a full sweep each joint's span midpoint should land near it — otherwise the parked position was off-centre and wrap headroom shrinks.</p>
+    </article>
+
+    <article>
+      <h2>Review and write</h2>
+      <div class="row">
+        <button data-draft-from="json">Load from file</button>
+        <button data-draft-from="motors">Load from motors</button>
+        <span class="spacer"></span>
+        <button class="primary" id="btn-calib-apply">Write to motors + save file</button>
+      </div>
+      <div id="draft-table"></div>
+      <p class="hint" id="apply-hint"></p>
+    </article>
+
+    <article>
+      <h2>Diagnostics for this arm</h2>
+      <div id="calib-findings"></div>
+    </article>
+  </section>
+
+  <!-- ============================ TELEOP ============================ -->
+  <section class="tabpage" id="tab-teleop">
+    <article>
+      <h2>Control</h2>
+      <div class="row">
+        <button class="primary" id="btn-teleop-start">Start</button>
+        <button class="danger" id="btn-teleop-stop">Stop (hold torque)</button>
+        <button class="panic" id="btn-teleop-panic">E-stop and release</button>
+        <span class="spacer"></span>
+        <button id="btn-rerun" title="Stream joint values and camera frames to the Rerun viewer">Rerun view</button>
+        <button id="btn-operator" title="Open a large camera + joint view in its own window">Operator view ↗</button>
+        <span class="mono small muted" id="teleop-stats"></span>
+      </div>
+      <p class="hint">Stop keeps the follower where it is. E-stop cuts torque — the arm drops, so hold it first.</p>
+    </article>
+
+    <article>
+      <h2>Joint values</h2>
+      <table id="tbl-teleop">
+        <thead><tr><th>Joint</th><th>Leader</th><th>Follower</th><th>Δ</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </article>
+
+    <article>
+      <h2>Camera preview</h2>
+      <div class="cams" id="teleop-cams"></div>
+      <p class="hint" id="teleop-cam-hint">Open a camera on the Device tab and its preview appears here.</p>
+    </article>
+  </section>
+</main>
+
+<script src="/static/app.js?v={{v}}"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# Keep every text file at LF, on every platform.
+#
+# vendor/lerobot_motors/ holds verbatim copies of upstream lerobot files. Letting
+# git rewrite their line endings would break the "byte-identical to upstream apart
+# from three import lines" property that vendor/VENDOR.md documents.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
